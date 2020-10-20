@@ -1,0 +1,288 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, user-scalable=no">
+<script src="https://cdn.jsdelivr.net/npm/p5@0.10.2/lib/p5.js"></script>
+<script>
+let colors = ['black','white','cyan','purple','yellow','blue','orange','green','red'];
+let board = [];
+let tetNames = ["Straight","T-Shape","Square","J-Shape","L-Shape","S-Shape","Z-Shape"];
+let tetrominos = [["XXXX"],["XXX","OXO"],["XX","XX"],["XXX","OOX"],["XOO","XXX"],["OXX","XXO"],["XXO","OXX"]];
+
+let currentTet = 0;
+let currentR = 0;
+let currentPos = [5,2];
+let currentBounds = [];
+
+let keyNames = ['w','s','a','d','r'];
+let keyStates = [0,0,0,0,0];
+
+let timer = 0;
+let pauseGame = false;
+
+let boardWidth = 10;
+let boardHeight = 24;
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);    
+    background(255);
+    //frameRate(5);
+    board = [];
+    for(let i=0;i<boardWidth;i++){
+        let inner = [];
+        for(let j=0;j<boardHeight;j++){    
+            inner.push(0);
+        }
+        board.push(inner);
+    }
+}
+function stepGame(){
+    if(timer % 5 == 0){
+        applyInput();
+    }
+    calculateBounds();
+    timer++;
+    if(timer == 20){
+        if(!checkCollision([0,1])){
+            currentPos[1]++;
+        }
+        else{
+            bakePiece();
+        }
+        timer = 0;
+    }
+}
+function draw() {
+    clear();
+    background(255);
+    stepSize = windowHeight/20;
+    xOff = windowWidth/2 - stepSize * 5;
+    yOff = -stepSize * 4;
+    if(!pauseGame){
+        stepGame();
+    }
+    // Draw the board
+    for(let i=0;i<board.length;i++)
+    {
+        for(let j=3;j<board[i].length;j++)
+        {
+            fill(colors[board[i][j]]);
+            rect(xOff+i*stepSize,yOff+j*stepSize,stepSize,stepSize);
+        }
+    }
+    // Draw the currently active shape
+    for(let i=0;i<currentBounds.length;i++)
+    {
+        fill(colors[currentTet+2]);
+        rect(xOff+(currentPos[0]+currentBounds[i][0])*stepSize,yOff+(currentPos[1]+currentBounds[i][1])*stepSize,stepSize,stepSize);
+    }
+    // Show centrepoint for debugging
+    //fill('red');
+    //rect(xOff+(currentPos[0])*stepSize,yOff+(currentPos[1])*stepSize,stepSize,stepSize);
+}
+function bakePiece(){
+    for(let i=0;i<currentBounds.length;i++){
+        board[currentPos[0]+currentBounds[i][0]][currentPos[1]+currentBounds[i][1]] = currentTet + 2;
+    }
+    clearRows();
+    currentTet = Math.floor(Math.random()*tetNames.length);
+    currentPos = [5,2];
+}
+function clearRows(){
+    // If the current or the previous row is clear to move down
+    let fillRow = false;
+    let emptRow = true;
+    let prevRow = false;
+    for(let j=boardHeight-1;j>=0;j--){
+        prevRow = emptRow;
+        emptRow = true;
+        fillRow = true;
+        for(let i=0;i<board.length;i++){
+            // Check if a row is empty
+            if(board[i][j]){
+                emptRow = false;
+            }
+            // Check if a row is full
+            else{
+                fillRow = false;
+            }
+        }
+        // If the row is full clear it
+        if(fillRow){
+            for(let i=0;i<board.length;i++){
+                board[i][j] = 0;
+            }
+            emptRow = true;
+        }
+        // If the previous row is empty move this row down
+        if(!emptRow && prevRow && j<23){
+            for(let i=0;i<board.length;i++){
+                board[i][j+1] = board[i][j];
+                board[i][j] = 0;
+            }
+            // Go back under the currently moved row 
+            // to check if it can be moved again
+            j += 3;
+            emptRow = false;
+        }
+    }
+}
+function applyInput(){
+    for(let i=0;i<keyStates.length;i++)
+    {
+        if(keyStates[i])
+        {
+            switch(i)
+            {
+                case 0: // w
+                if(!checkCollision([0,-1])){
+                    currentPos[1]--;
+                }
+                break;
+                case 1: // s
+                if(!checkCollision([0,1])){
+                    currentPos[1]++;
+                }
+                break;
+                case 2: // a
+                if(!checkCollision([-1,0])){
+                    currentPos[0]--;
+                }
+                break;
+                case 3: // d
+                if(!checkCollision([1,0])){
+                    currentPos[0]++;
+                }
+                break;
+                case 4: // r
+                currentR++;
+                if(currentR == 4){
+                currentR = 0;
+                }
+                calculateBounds();
+                let pushOff = checkCollision([0,0]);
+                if(pushOff == 3){
+                    currentR--;
+                    if(currentR == -1){
+                        currentR = 3;
+                    }
+                }
+                else{
+                    while(pushOff)
+                    {
+                        if(pushOff == 1){
+                            currentPos[0]++;
+                        }
+                        if(pushOff == 2){
+                            currentPos[0]--;
+                        }
+                        calculateBounds();
+                        pushOff = checkCollision([0,0]);
+                    }
+                }
+                calculateBounds();
+                break;
+            }
+        }
+    }
+}
+function calculateBounds(){
+    let shape = tetrominos[currentTet];
+    let width = shape.length;
+    let height = shape[0].length;
+    currentBounds = [];
+    for(let i=0;i<width;i++)
+    {
+        for(let j=0;j<height;j++)
+        {
+            // Shapes are stored as strings and 
+            // converted into coordinates and rotations here
+            if(shape[i][j] == "X")
+            {
+                let pos = [i,j];
+                if(currentTet != 2)
+                {
+                    // Rotate shape
+                    switch(currentR)
+                    {
+                        case 0:
+                            pos[1] = j - Math.floor(height/2);
+                        break;
+                        case 1:
+                            pos[0] = Math.floor(height/2) - j;
+                            pos[1] = i;
+                        break;
+                        case 2:
+                            pos[0] = Math.floor(width/2)  - i;
+                            pos[1] = Math.floor(height/2) - j;
+                        break;
+                        case 3:
+                            pos[0] = j - Math.floor(height/2);
+                            pos[1] = Math.floor(width/2)  - i;
+                        break;
+                    }
+                }
+                // Create a list of the positions where the shape occupies
+                currentBounds.push(pos);
+            }
+        }
+    }
+}
+// Check if a collision occurs after applying a movement
+function checkCollision(moveTo){
+    let move = false;
+    for(let i=0;i<currentBounds.length;i++){
+        let testPosX = currentPos[0]+moveTo[0]+currentBounds[i][0];
+        let testPosY = currentPos[1]+moveTo[1]+currentBounds[i][1];
+        // Push to the right
+        if(testPosX < 0){
+            move = 1;
+        }
+        // Push to the left
+        if(testPosX >= 10){
+            move = 2;
+        }
+        // Don't push
+        if(testPosY < 0 || testPosY >= 24){
+            move = 1;
+        }
+        if(!move)
+        {
+            // Check if shape collides with shape on the board
+            if(board[testPosX][testPosY])
+            {
+                move = 3;
+            }
+        }
+    }
+    return move;
+}
+// Toggle key state on
+function keyPressed(){
+    if(keyCode==ESCAPE){
+        pauseGame = !pauseGame;
+    }
+    for(let i=0;i<keyStates.length;i++)
+    {
+        if(key==keyNames[i]){
+            keyStates[i] = true;
+        }
+    }
+}
+// Toggle key state off
+function keyReleased(){
+    for(let i=0;i<keyStates.length;i++)
+    {
+        if(key==keyNames[i]){
+            keyStates[i] = false;
+        }
+    }
+}
+function windowResized() {
+    setup();
+}
+</script>
+</head>
+<body style="margin: 0">
+</body>
+</html>
